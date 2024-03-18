@@ -57,8 +57,10 @@ func NewBTreeG[T any](less func(a, b T) bool) *BTreeG[T] {
 func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
 	tr := new(BTreeG[T])
 	tr.isoid = newIsoID()
-	tr.mu = new(sync.RWMutex)
 	tr.locks = !opts.NoLocks
+	if tr.locks {
+		tr.mu = new(sync.RWMutex)
+	}
 	tr.less = less
 	tr.init(opts.Degree)
 	if opts.ReadOnly {
@@ -1127,7 +1129,9 @@ func (tr *BTreeG[T]) IsoCopy() *BTreeG[T] {
 	}
 	tr2 := new(BTreeG[T])
 	*tr2 = *tr
-	tr2.mu = new(sync.RWMutex)
+	if tr.locks {
+		tr2.mu = new(sync.RWMutex)
+	}
 	tr2.isoid = newIsoID()
 	tr2.readOnly = false
 	return tr2
