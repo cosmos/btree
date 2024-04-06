@@ -13,6 +13,7 @@ type BTreeG[T any] struct {
 	locks        bool
 	copyItems    bool
 	isoCopyItems bool
+	readOnly     bool
 	less         func(a, b T) bool
 	empty        T
 	max          int
@@ -44,6 +45,8 @@ type Options struct {
 	// NoLocks will disable locking. Otherwide a sync.RWMutex is used to
 	// ensure all operations are safe across multiple goroutines.
 	NoLocks bool
+	// ReadOnly marks the tree as read-only, any modifications will trigger panic.
+	ReadOnly bool
 }
 
 // New returns a new BTree
@@ -54,11 +57,21 @@ func NewBTreeG[T any](less func(a, b T) bool) *BTreeG[T] {
 func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
 	tr := new(BTreeG[T])
 	tr.isoid = newIsoID()
-	tr.mu = new(sync.RWMutex)
 	tr.locks = !opts.NoLocks
+	if tr.locks {
+		tr.mu = new(sync.RWMutex)
+	}
 	tr.less = less
 	tr.init(opts.Degree)
+	if opts.ReadOnly {
+		tr.Freeze()
+	}
 	return tr
+}
+
+// Freeze marks the tree as read-only.
+func (tr *BTreeG[T]) Freeze() {
+	tr.readOnly = true
 }
 
 func (tr *BTreeG[T]) init(degree int) {
@@ -192,6 +205,9 @@ path_match:
 
 // SetHint sets or replace a value for a key using a path hint
 func (tr *BTreeG[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.locks {
 		tr.mu.Lock()
 		prev, replaced = tr.setHint(item, hint)
@@ -441,6 +457,9 @@ func (tr *BTreeG[T]) Delete(key T) (T, bool) {
 // deleted value.
 // Returns false if there was no value by that key found.
 func (tr *BTreeG[T]) DeleteHint(key T, hint *PathHint) (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -761,6 +780,9 @@ func (tr *BTreeG[T]) nodeDescend(cn **node[T], pivot T, hint *PathHint,
 
 // Load is for bulk loading pre-sorted items
 func (tr *BTreeG[T]) Load(item T) (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -849,6 +871,9 @@ func (tr *BTreeG[T]) maxMut(mut bool) (T, bool) {
 // PopMin removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTreeG[T]) PopMin() (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -890,6 +915,9 @@ func (tr *BTreeG[T]) PopMin() (T, bool) {
 // PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTreeG[T]) PopMax() (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -963,6 +991,9 @@ func (tr *BTreeG[T]) getAt(index int, mut bool) (T, bool) {
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
 func (tr *BTreeG[T]) DeleteAt(index int) (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -1090,14 +1121,19 @@ func (tr *BTreeG[T]) Copy() *BTreeG[T] {
 }
 
 func (tr *BTreeG[T]) IsoCopy() *BTreeG[T] {
-	if tr.lock(true) {
-		defer tr.unlock(true)
+	if tr.lock(!tr.readOnly) {
+		defer tr.unlock(!tr.readOnly)
 	}
-	tr.isoid = newIsoID()
+	if !tr.readOnly {
+		tr.isoid = newIsoID()
+	}
 	tr2 := new(BTreeG[T])
 	*tr2 = *tr
-	tr2.mu = new(sync.RWMutex)
+	if tr.locks {
+		tr2.mu = new(sync.RWMutex)
+	}
 	tr2.isoid = newIsoID()
+	tr2.readOnly = false
 	return tr2
 }
 
@@ -1393,6 +1429,9 @@ func (tr *BTreeG[T]) nodeItems(cn **node[T], items []T, mut bool) []T {
 
 // Clear will delete all items.
 func (tr *BTreeG[T]) Clear() {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
