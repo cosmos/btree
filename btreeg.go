@@ -367,6 +367,7 @@ func (tr *BTreeG[T]) Scan(iter func(item T) bool) {
 	tr.scan(iter, false)
 }
 
+func (tr *BTreeG[T]) ScanMut(iter func(item T) bool) {
 	tr.scan(iter, true)
 }
 
@@ -1073,6 +1074,7 @@ func (tr *BTreeG[T]) AscendHint(pivot T, iter func(item T) bool, hint *PathHint,
 	tr.ascend(pivot, iter, false, hint)
 }
 
+func (tr *BTreeG[T]) AscendHintMut(pivot T, iter func(item T) bool,
 	hint *PathHint,
 ) {
 	tr.ascend(pivot, iter, true, hint)
@@ -1117,6 +1119,7 @@ func (tr *BTreeG[T]) Reverse(iter func(item T) bool) {
 
 func (tr *BTreeG[T]) ReverseMut(iter func(item T) bool) {
 	tr.reverse(iter, true)
+}
 
 func (tr *BTreeG[T]) reverse(iter func(item T) bool, mut bool) {
 	if tr.lock(mut) {
@@ -1158,6 +1161,7 @@ func (tr *BTreeG[T]) nodeReverse(cn **node[T], iter func(item T) bool, mut bool,
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
 func (tr *BTreeG[T]) Descend(pivot T, iter func(item T) bool) {
+	tr.descend(pivot, iter, false, nil)
 }
 
 func (tr *BTreeG[T]) DescendMut(pivot T, iter func(item T) bool) {
@@ -1179,6 +1183,7 @@ func (tr *BTreeG[T]) descend(pivot T, iter func(item T) bool, mut bool,
 func (tr *BTreeG[T]) DescendHint(pivot T, iter func(item T) bool,
 	hint *PathHint,
 ) {
+	tr.descend(pivot, iter, false, hint)
 }
 
 func (tr *BTreeG[T]) DescendHintMut(pivot T, iter func(item T) bool,
@@ -1394,6 +1399,7 @@ func (tr *BTreeG[T]) PopMax() (T, bool) {
 
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
+func (tr *BTreeG[T]) GetAt(index int) (T, bool) {
 	return tr.getAt(index, false)
 }
 
