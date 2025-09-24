@@ -13,6 +13,7 @@ type BTreeG[T any] struct {
 	locks        bool
 	copyItems    bool
 	isoCopyItems bool
+	readOnly     bool
 	less         func(a, b T) bool
 	empty        T
 	max          int
@@ -44,6 +45,8 @@ type Options struct {
 	// NoLocks will disable locking. Otherwide a sync.RWMutex is used to
 	// ensure all operations are safe across multiple goroutines.
 	NoLocks bool
+	// ReadOnly marks the tree as read-only, any modifications will trigger panic.
+	ReadOnly bool
 }
 
 // New returns a new BTree
@@ -60,7 +63,15 @@ func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
 	}
 	tr.less = less
 	tr.init(opts.Degree)
+	if opts.ReadOnly {
+		tr.Freeze()
+	}
 	return tr
+}
+
+// Freeze marks the tree as read-only.
+func (tr *BTreeG[T]) Freeze() {
+	tr.readOnly = true
 }
 
 func (tr *BTreeG[T]) init(degree int) {
@@ -194,6 +205,9 @@ path_match:
 
 // SetHint sets or replace a value for a key using a path hint
 func (tr *BTreeG[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.locks {
 		tr.mu.Lock()
 		prev, replaced = tr.setHint(item, hint)
@@ -352,7 +366,7 @@ func (tr *BTreeG[T]) nodeSet(cn **node[T], item T,
 func (tr *BTreeG[T]) Scan(iter func(item T) bool) {
 	tr.scan(iter, false)
 }
-func (tr *BTreeG[T]) ScanMut(iter func(item T) bool) {
+
 	tr.scan(iter, true)
 }
 
@@ -875,6 +889,9 @@ func (tr *BTreeG[T]) Delete(key T) (T, bool) {
 // deleted value.
 // Returns false if there was no value by that key found.
 func (tr *BTreeG[T]) DeleteHint(key T, hint *PathHint) (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -1055,7 +1072,7 @@ func (tr *BTreeG[T]) AscendHint(pivot T, iter func(item T) bool, hint *PathHint,
 ) {
 	tr.ascend(pivot, iter, false, hint)
 }
-func (tr *BTreeG[T]) AscendHintMut(pivot T, iter func(item T) bool,
+
 	hint *PathHint,
 ) {
 	tr.ascend(pivot, iter, true, hint)
@@ -1090,15 +1107,17 @@ func (tr *BTreeG[T]) nodeAscend(cn **node[T], pivot T, hint *PathHint,
 			}
 		}
 	}
+
 	return true
 }
 
 func (tr *BTreeG[T]) Reverse(iter func(item T) bool) {
 	tr.reverse(iter, false)
 }
+
 func (tr *BTreeG[T]) ReverseMut(iter func(item T) bool) {
 	tr.reverse(iter, true)
-}
+
 func (tr *BTreeG[T]) reverse(iter func(item T) bool, mut bool) {
 	if tr.lock(mut) {
 		defer tr.unlock(mut)
@@ -1135,14 +1154,16 @@ func (tr *BTreeG[T]) nodeReverse(cn **node[T], iter func(item T) bool, mut bool,
 }
 
 // Descend the tree within the range [pivot, first]
+
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
 func (tr *BTreeG[T]) Descend(pivot T, iter func(item T) bool) {
-	tr.descend(pivot, iter, false, nil)
 }
+
 func (tr *BTreeG[T]) DescendMut(pivot T, iter func(item T) bool) {
 	tr.descend(pivot, iter, true, nil)
 }
+
 func (tr *BTreeG[T]) descend(pivot T, iter func(item T) bool, mut bool,
 	hint *PathHint,
 ) {
@@ -1158,8 +1179,8 @@ func (tr *BTreeG[T]) descend(pivot T, iter func(item T) bool, mut bool,
 func (tr *BTreeG[T]) DescendHint(pivot T, iter func(item T) bool,
 	hint *PathHint,
 ) {
-	tr.descend(pivot, iter, false, hint)
 }
+
 func (tr *BTreeG[T]) DescendHintMut(pivot T, iter func(item T) bool,
 	hint *PathHint,
 ) {
@@ -1195,6 +1216,9 @@ func (tr *BTreeG[T]) nodeDescend(cn **node[T], pivot T, hint *PathHint,
 
 // Load is for bulk loading pre-sorted items
 func (tr *BTreeG[T]) Load(item T) (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -1283,6 +1307,9 @@ func (tr *BTreeG[T]) maxMut(mut bool) (T, bool) {
 // PopMin removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTreeG[T]) PopMin() (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -1324,6 +1351,9 @@ func (tr *BTreeG[T]) PopMin() (T, bool) {
 // PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTreeG[T]) PopMax() (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -1358,17 +1388,19 @@ func (tr *BTreeG[T]) PopMax() (T, bool) {
 		}
 		n = (*n.children)[len(*n.children)-1]
 	}
+
 	return tr.deleteHint(item, nil)
 }
 
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *BTreeG[T]) GetAt(index int) (T, bool) {
 	return tr.getAt(index, false)
 }
+
 func (tr *BTreeG[T]) GetAtMut(index int) (T, bool) {
 	return tr.getAt(index, true)
 }
+
 func (tr *BTreeG[T]) getAt(index int, mut bool) (T, bool) {
 	if tr.lock(mut) {
 		defer tr.unlock(mut)
@@ -1397,6 +1429,9 @@ func (tr *BTreeG[T]) getAt(index int, mut bool) (T, bool) {
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
 func (tr *BTreeG[T]) DeleteAt(index int) (T, bool) {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
@@ -1471,19 +1506,21 @@ func (tr *BTreeG[T]) Height() int {
 				break
 			}
 			n = (*n.children)[0]
+
 		}
 	}
 	return height
 }
 
 // Walk iterates over all items in tree, in order.
-// The items param will contain one or more items.
 func (tr *BTreeG[T]) Walk(iter func(item []T) bool) {
 	tr.walk(iter, false)
 }
+
 func (tr *BTreeG[T]) WalkMut(iter func(item []T) bool) {
 	tr.walk(iter, true)
 }
+
 func (tr *BTreeG[T]) walk(iter func(item []T) bool, mut bool) {
 	if tr.lock(mut) {
 		defer tr.unlock(mut)
@@ -1524,16 +1561,19 @@ func (tr *BTreeG[T]) Copy() *BTreeG[T] {
 }
 
 func (tr *BTreeG[T]) IsoCopy() *BTreeG[T] {
-	var mu *sync.RWMutex
-	if tr.lock(true) {
-		mu = new(sync.RWMutex)
-		defer tr.unlock(true)
+	if tr.lock(!tr.readOnly) {
+		defer tr.unlock(!tr.readOnly)
 	}
-	tr.isoid = newIsoID()
+	if !tr.readOnly {
+		tr.isoid = newIsoID()
+	}
 	tr2 := new(BTreeG[T])
 	*tr2 = *tr
-	tr2.mu = mu
+	if tr.locks {
+		tr2.mu = new(sync.RWMutex)
+	}
 	tr2.isoid = newIsoID()
+	tr2.readOnly = false
 	return tr2
 }
 
@@ -1829,6 +1869,9 @@ func (tr *BTreeG[T]) nodeItems(cn **node[T], items []T, mut bool) []T {
 
 // Clear will delete all items.
 func (tr *BTreeG[T]) Clear() {
+	if tr.readOnly {
+		panic("read-only tree")
+	}
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
